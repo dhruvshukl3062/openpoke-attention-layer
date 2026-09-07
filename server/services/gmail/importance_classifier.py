@@ -8,7 +8,8 @@ from typing import Any, Dict, Optional
 from .processing import ProcessedEmail
 from ...config import get_settings
 from ...logging_config import logger
-from ...openrouter_client import OpenRouterError, request_chat_completion
+from ...openrouter_client import OpenRouterError
+from ..llm import get_llm_client
 
 
 _TOOL_NAME = "mark_email_importance"
@@ -92,7 +93,7 @@ async def classify_email_importance(email: ProcessedEmail) -> Optional[str]:
     messages = [{"role": "user", "content": user_payload}]
 
     try:
-        response = await request_chat_completion(
+        response = await get_llm_client().complete(
             model=model,
             messages=messages,
             system=_SYSTEM_PROMPT,

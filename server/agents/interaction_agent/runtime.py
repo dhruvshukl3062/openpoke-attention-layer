@@ -8,7 +8,7 @@ from .agent import build_system_prompt, prepare_message_with_history
 from .tools import ToolResult, get_tool_schemas, handle_tool_call
 from ...config import get_settings
 from ...services.conversation import get_conversation_log, get_working_memory_log
-from ...openrouter_client import request_chat_completion
+from ...services.llm import get_llm_client
 from ...logging_config import logger
 
 
@@ -210,7 +210,7 @@ class InteractionAgentRuntime:
             "Interaction agent calling LLM",
             extra={"model": self.model, "tools": len(self.tool_schemas)},
         )
-        return await request_chat_completion(
+        return await get_llm_client().complete(
             model=self.model,
             messages=messages,
             system=system_prompt,

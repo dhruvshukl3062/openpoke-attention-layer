@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .agent import ExecutionAgent
 from .tools import get_tool_schemas, get_tool_registry
 from ...config import get_settings
-from ...openrouter_client import request_chat_completion
+from ...services.llm import get_llm_client
 from ...logging_config import logger
 
 
@@ -153,7 +153,7 @@ class ExecutionAgentRuntime:
         """Make an LLM call."""
         tools_to_send = self.tool_schemas if with_tools else None
         logger.info(f"[{self.agent.name}] Calling LLM with model: {self.model}, tools: {len(tools_to_send) if tools_to_send else 0}")
-        return await request_chat_completion(
+        return await get_llm_client().complete(
             model=self.model,
             messages=messages,
             system=system_prompt,
