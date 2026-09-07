@@ -1,0 +1,4 @@
+# Test-only dependencies. Install alongside server/requirements.txt:
+#   pip install -r server/requirements.txt -r server/requirements-dev.txt
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
