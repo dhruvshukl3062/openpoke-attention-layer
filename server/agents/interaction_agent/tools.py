@@ -7,7 +7,9 @@ from typing import Any, Optional
 
 from ...logging_config import logger
 from ...services.conversation import get_conversation_log
-from ...services.execution import get_agent_roster, get_execution_agent_logs
+from ...services.attention import get_agent_registry
+from ...services.attention.ranking import extract_entities, find_duplicate
+from ...services.execution import get_execution_agent_logs
 from ..execution_agent.batch_manager import ExecutionBatchManager
 
 
@@ -110,14 +112,35 @@ _EXECUTION_BATCH_MANAGER = ExecutionBatchManager()
 
 # Create or reuse execution agent and dispatch instructions asynchronously
 def send_message_to_agent(agent_name: str, instructions: str) -> ToolResult:
-    """Send instructions to an execution agent."""
-    roster = get_agent_roster()
-    roster.load()
-    existing_agents = set(roster.get_agents())
-    is_new = agent_name not in existing_agents
+    """Send instructions to an execution agent, reusing one where possible.
 
-    if is_new:
-        roster.add_agent(agent_name)
+    Two changes from upstream. Agents are recorded with the metadata the
+    shortlist ranks on -- purpose and the entities they touch -- so future turns
+    can find them. And a proposed name that duplicates an existing agent is
+    redirected to it, rather than quietly creating a second agent for the same
+    subject and splitting the thread's history in half.
+    """
+
+    registry = get_agent_registry()
+    requested_name = agent_name
+    deduplicated = False
+
+    if not registry.exists(agent_name):
+        match = find_duplicate(registry.all(), agent_name)
+        if match is not None:
+            logger.info(f"Reusing '{match.name}' for proposed agent '{agent_name}'")
+            agent_name = match.name
+            deduplicated = True
+
+    is_new = not registry.exists(agent_name)
+
+    entities = extract_entities(f"{agent_name}. {instructions}")
+    registry.upsert(
+        agent_name,
+        purpose=instructions.strip()[:160] if is_new else None,
+        entities=entities,
+    )
+    registry.touch(agent_name)
 
     get_execution_agent_logs().record_request(agent_name, instructions)
 
@@ -146,6 +169,11 @@ def send_message_to_agent(agent_name: str, instructions: str) -> ToolResult:
             "status": "submitted",
             "agent_name": agent_name,
             "new_agent_created": is_new,
+            **(
+                {"reused_instead_of": requested_name}
+                if deduplicated
+                else {}
+            ),
         },
     )
 

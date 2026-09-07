@@ -49,6 +49,12 @@ def isolated_state(tmp_path, monkeypatch):
     logs = log_store_module.ExecutionAgentLogStore(data_dir / "execution_agents")
     monkeypatch.setattr(log_store_module, "_execution_agent_logs", logs)
 
+    # -- attention layer: agent registry -----------------------------------
+    from server.services.attention import registry as registry_module
+
+    registry = registry_module.AgentRegistry(data_dir / "execution_agents" / "registry.json")
+    monkeypatch.setattr(registry_module, "_registry", registry)
+
     yield
 
 

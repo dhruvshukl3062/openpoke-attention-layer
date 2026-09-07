@@ -11,9 +11,10 @@ import asyncio
 
 import pytest
 
+from server.agents.interaction_agent.agent import SHORTLIST_SIZE
 from server.agents.interaction_agent.runtime import InteractionAgentRuntime
 from server.services.conversation import get_conversation_log
-from server.services.execution import get_agent_roster
+from server.services.attention import get_agent_registry
 from server.services.llm import (
     ScriptedLLM,
     raw_tool_call_response,
@@ -90,12 +91,11 @@ async def test_parallel_agent_dispatch_registers_every_agent():
         await asyncio.sleep(0)  # let the spawned tasks start
 
     assert result.execution_agents_used == 2
-    assert set(get_agent_roster().get_agents()) == {"Email to Alice", "Email to Bob"}
+    assert set(get_agent_registry().names()) == {"Email to Alice", "Email to Bob"}
 
 
 async def test_existing_agent_is_reused_not_duplicated():
-    roster = get_agent_roster()
-    roster.add_agent("Email to Alice")
+    get_agent_registry().upsert("Email to Alice", entities=["Alice"])
 
     scripted = _quiet_execution_agents(
         ScriptedLLM(
@@ -112,69 +112,86 @@ async def test_existing_agent_is_reused_not_duplicated():
         await InteractionAgentRuntime().execute("reply to alice")
         await asyncio.sleep(0)
 
-    assert get_agent_roster().get_agents() == ["Email to Alice"]
+    assert get_agent_registry().names() == ["Email to Alice"]
 
 
 # ---------------------------------------------------------------------------
 # Context: what the model is actually shown
 # ---------------------------------------------------------------------------
 
-async def test_every_roster_entry_is_pasted_into_the_prompt():
-    """Baseline for the Attention Layer.
-
-    Upstream renders the whole roster into every turn, so prompt size grows with
-    the number of agents. This test documents that behaviour so the change is
-    visible when the shortlist replaces it.
-    """
-
-    roster = get_agent_roster()
-    for index in range(40):
-        roster.add_agent(f"Agent Number {index}")
-
-    scripted = ScriptedLLM([text_response("ok")])
-    with use_llm_client(scripted):
-        await InteractionAgentRuntime().execute("hi")
-
-    prompt = scripted.last_request().messages[0]["content"]
-    assert prompt.count("<agent name=") == 40
-    assert "Agent Number 0" in prompt and "Agent Number 39" in prompt
-
-
-async def _prompt_chars_with_roster(agent_count: int) -> int:
-    roster = get_agent_roster()
-    roster.clear()
+async def _prompt_with_roster(agent_count: int, request: str = "hi") -> str:
+    # Each call appends to the conversation log, so it has to be reset or the
+    # growing transcript is mistaken for growing roster cost.
+    get_conversation_log().clear()
+    registry = get_agent_registry()
+    registry.clear()
     for index in range(agent_count):
-        roster.add_agent(f"Agent Number {index}")
+        # Fixed-width names and a constant purpose, so the only thing that can
+        # change between roster sizes is how many agents are rendered.
+        registry.upsert(f"Agent Number {index:04d}", purpose="handles a topic")
 
     scripted = ScriptedLLM([text_response("ok")])
     with use_llm_client(scripted):
-        await InteractionAgentRuntime().execute("hi")
-    return scripted.last_request().prompt_chars
+        await InteractionAgentRuntime().execute(request)
+    return scripted.last_request().messages[0]["content"]
 
 
-async def test_roster_cost_per_turn_grows_linearly_and_without_bound():
-    """The growth curve, measured. The Attention Layer should flatten this.
+async def test_the_model_sees_a_bounded_shortlist_not_the_whole_roster():
+    prompt = await _prompt_with_roster(40)
 
-    Measured as the *marginal* cost of the roster rather than total prompt size:
-    the static system prompt is ~10k characters, so at small roster sizes it
-    swamps the signal. What matters is that each additional agent adds a fixed
-    cost to every turn forever, which is what makes this unbounded rather than
-    merely large.
+    assert prompt.count("<agent ") == SHORTLIST_SIZE
+    assert 'total="40"' in prompt, "the model should know the list is a selection"
+    assert "name an agent directly" in prompt, "and how to reach one that is not listed"
+
+
+async def test_roster_cost_per_turn_is_flat_regardless_of_roster_size():
+    """The claim the whole Attention Layer rests on, measured.
+
+    Upstream rendered every agent, so the marginal prompt cost grew linearly and
+    without bound. With a shortlist the per-turn cost is set by SHORTLIST_SIZE,
+    so a 40x bigger roster costs the same.
     """
 
-    baseline = await _prompt_chars_with_roster(0)
-    at_50 = await _prompt_chars_with_roster(50) - baseline
-    at_200 = await _prompt_chars_with_roster(200) - baseline
+    baseline = len(await _prompt_with_roster(0))
+    at_10 = len(await _prompt_with_roster(10)) - baseline
+    at_400 = len(await _prompt_with_roster(400)) - baseline
 
-    assert at_50 > 0, "the roster should contribute to the prompt at all"
+    assert at_10 > 0, "the shortlist should still contribute to the prompt"
+    # The only legitimate difference is the digits in total="N".
+    assert at_400 - at_10 <= 4, (
+        f"prompt cost should be flat in roster size, grew {at_10} -> {at_400} chars"
+    )
 
-    # Linear in agent count: 4x the agents costs ~4x the characters.
-    ratio = at_200 / at_50
-    assert 3.5 < ratio < 4.5, f"expected linear growth, got a {ratio:.2f}x ratio"
 
-    # And the per-agent cost is real, not rounding noise.
-    per_agent = at_200 / 200
-    assert per_agent > 20, f"each agent costs {per_agent:.1f} chars of every single turn"
+async def test_an_agent_named_in_the_request_is_never_ranked_away():
+    registry = get_agent_registry()
+    registry.clear()
+    for index in range(40):
+        registry.upsert(f"Agent Number {index:04d}", purpose="noise")
+    registry.upsert("Vercel Job Offer", purpose="offer negotiation")
+
+    scripted = ScriptedLLM([text_response("ok")])
+    with use_llm_client(scripted):
+        await InteractionAgentRuntime().execute("any update on the Vercel Job Offer?")
+    prompt = scripted.last_request().messages[0]["content"]
+
+    assert "Vercel Job Offer" in prompt
+
+
+async def test_shortlist_carries_the_metadata_that_supports_the_choice():
+    registry = get_agent_registry()
+    registry.clear()
+    registry.upsert("Email to Alice", purpose="lunch thread", entities=["Alice"])
+    registry.touch("Email to Alice")
+
+    scripted = ScriptedLLM([text_response("ok")])
+    with use_llm_client(scripted):
+        await InteractionAgentRuntime().execute("ping Alice")
+    prompt = scripted.last_request().messages[0]["content"]
+
+    assert 'purpose="lunch thread"' in prompt
+    assert "last_used=" in prompt
+    assert 'runs="1"' in prompt
 
 
 # ---------------------------------------------------------------------------
