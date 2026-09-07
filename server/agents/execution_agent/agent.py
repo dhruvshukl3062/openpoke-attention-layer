@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+from ...services.attention.compaction import render_agent_history
 from ...services.execution import get_execution_agent_logs
 from ...logging_config import logger
 
@@ -69,8 +70,10 @@ class ExecutionAgent:
         """
         base_prompt = self.build_system_prompt()
 
-        # Load history transcript
-        transcript = self._log_store.load_transcript(self.name)
+        # Rolling summary plus a recent verbatim tail, so a long-lived agent's
+        # own prompt stays bounded. Falls back to the full transcript when
+        # nothing has been compacted yet.
+        transcript = render_agent_history(self.name)
 
         if transcript:
             # Apply conversation limit if needed

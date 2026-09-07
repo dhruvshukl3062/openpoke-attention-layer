@@ -9,6 +9,7 @@ both sides without one.
   one place that dedupes, batches, scores and budgets interruptions.
 """
 
+from .compaction import compact_agent_history, needs_compaction, render_agent_history
 from .registry import (
     DEFAULT_DORMANT_AFTER,
     AgentRecord,
@@ -18,6 +19,9 @@ from .registry import (
 )
 
 __all__ = [
+    "compact_agent_history",
+    "needs_compaction",
+    "render_agent_history",
     "AgentRecord",
     "AgentRegistry",
     "AgentStatus",

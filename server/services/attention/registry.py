@@ -73,6 +73,9 @@ class AgentRecord:
     summary: str = ""
     status: AgentStatus = "active"
     invocations: int = 0
+    #: How many of this agent's log entries are already folded into ``summary``.
+    #: Everything after this index is still rendered verbatim.
+    compacted_through: int = 0
     created_at: datetime = field(default_factory=_utcnow)
     last_used_at: datetime = field(default_factory=_utcnow)
 
@@ -85,6 +88,7 @@ class AgentRecord:
             "summary": self.summary,
             "status": self.status,
             "invocations": self.invocations,
+            "compacted_through": self.compacted_through,
             "created_at": _to_iso(self.created_at),
             "last_used_at": _to_iso(self.last_used_at),
         }
@@ -110,6 +114,11 @@ class AgentRecord:
         except (TypeError, ValueError):
             invocations = 0
 
+        try:
+            compacted_through = int(raw.get("compacted_through") or 0)
+        except (TypeError, ValueError):
+            compacted_through = 0
+
         return cls(
             name=name,
             purpose=str(raw.get("purpose") or ""),
@@ -118,6 +127,7 @@ class AgentRecord:
             summary=str(raw.get("summary") or ""),
             status=status,  # type: ignore[arg-type]
             invocations=invocations,
+            compacted_through=compacted_through,
             created_at=_from_iso(raw.get("created_at"), fallback_time),  # type: ignore[arg-type]
             last_used_at=_from_iso(raw.get("last_used_at"), fallback_time),  # type: ignore[arg-type]
         )
@@ -320,6 +330,27 @@ class AgentRegistry:
             if existing is None:
                 return None
             record = replace(existing, status=status)
+            self._records[name] = record
+            self.save()
+            return record
+
+    def set_compaction(self, name: str, *, summary: str, compacted_through: int) -> Optional[AgentRecord]:
+        """Record the result of folding old log entries into the rolling summary.
+
+        ``compacted_through`` only ever moves forward -- a stale writer must not
+        be able to rewind it and cause already-summarised entries to be rendered
+        verbatim again.
+        """
+
+        with self._lock:
+            existing = self._records.get(name)
+            if existing is None:
+                return None
+            record = replace(
+                existing,
+                summary=summary,
+                compacted_through=max(compacted_through, existing.compacted_through),
+            )
             self._records[name] = record
             self.save()
             return record

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .agent import ExecutionAgent
 from .tools import get_tool_schemas, get_tool_registry
 from ...config import get_settings
+from ...services.attention.compaction import compact_agent_history, needs_compaction
 from ...services.llm import get_llm_client
 from ...logging_config import logger
 
@@ -43,7 +44,11 @@ class ExecutionAgentRuntime:
     async def execute(self, instructions: str) -> ExecutionResult:
         """Execute the agent with given instructions."""
         try:
-            # Build system prompt with history
+            # Fold older log entries into the rolling summary before building the
+            # prompt, so history cost stays bounded across many invocations.
+            if needs_compaction(self.agent.name):
+                await compact_agent_history(self.agent.name)
+
             system_prompt = self.agent.build_system_prompt_with_history()
 
             # Start conversation with the instruction
