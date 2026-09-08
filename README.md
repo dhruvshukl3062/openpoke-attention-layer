@@ -1,3 +1,18 @@
+> ## 📌 Take-home submission
+>
+> This fork adds **the Attention Layer** — a response to the brief on agent overload.
+> The write-up, findings, design rationale, results and limitations are in
+> **[ATTENTION_LAYER.md](ATTENTION_LAYER.md)**. Start there.
+>
+> Quick check, no API key needed:
+> ```bash
+> pip install -r server/requirements.txt -r server/requirements-dev.txt
+> pytest -rx                                # 119 passed, 1 xfailed
+> python -m evals.run --days 30 --seeds 5   # baseline vs treatment + ablations
+> ```
+>
+> Everything below is the original upstream README.
+
 # OpenPoke 🌴
 
 OpenPoke is a simplified, open-source take on [Interaction Company’s](https://interaction.co/about) [Poke](https://poke.com/) assistant—built to show how a multi-agent orchestration stack can feel genuinely useful. It keeps the handful of things Poke is great at (email triage, reminders, and persistent agents) while staying easy to spin up locally.
