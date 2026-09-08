@@ -55,12 +55,18 @@ def urgency_for_email(summary: str, *, classified_important: bool = True) -> flo
     digest rather than vanishing.
     """
 
-    score = 0.72 if classified_important else 0.2
+    # The prior deliberately sits *below* the interrupt threshold. An earlier
+    # version started at 0.72, which meant anything the classifier flagged
+    # interrupted regardless of content -- the cues were decorative and urgency
+    # was really just the classifier's binary verdict wearing a float. Starting
+    # below the line makes the text decide, and pushes flagged-but-unremarkable
+    # mail into the digest where it belongs.
+    score = 0.55 if classified_important else 0.2
 
     if _matches(summary, _CRITICAL):
-        score += 0.22
+        score += 0.25
     elif _matches(summary, _ELEVATED):
-        score += 0.08
+        score += 0.10
 
     if _matches(summary, _ROUTINE):
         score -= 0.35

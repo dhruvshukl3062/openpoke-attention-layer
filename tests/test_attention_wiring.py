@@ -194,7 +194,10 @@ async def test_the_loop_flushes_a_closed_window(delivered, clock, monkeypatch):
 
     monkeypatch.setattr(attention_service, "_local_now", clock)
     attention_service.submit_candidate(
-        Candidate(source="email_watcher", key="k", summary="something", urgency=0.8)
+        Candidate(
+            source="email_watcher", key="k", summary="something", urgency=0.8,
+            created_at=clock.now,
+        )
     )
 
     loop = AttentionLoop()
@@ -212,7 +215,10 @@ async def test_the_digest_is_delivered_once_per_day(delivered, clock, monkeypatc
 
     monkeypatch.setattr(attention_service, "_local_now", clock)
     attention_service.submit_candidate(
-        Candidate(source="email_watcher", key="k1", summary="fyi", urgency=0.4)
+        Candidate(
+            source="email_watcher", key="k1", summary="fyi", urgency=0.4,
+            created_at=clock.now,
+        )
     )
 
     loop = AttentionLoop(digest_hour=8)  # clock is at 14:00, so it is due
@@ -220,7 +226,10 @@ async def test_the_digest_is_delivered_once_per_day(delivered, clock, monkeypatc
     assert len(delivered) == 1 and "Digest" in delivered[0]
 
     attention_service.submit_candidate(
-        Candidate(source="email_watcher", key="k2", summary="also fyi", urgency=0.4)
+        Candidate(
+            source="email_watcher", key="k2", summary="also fyi", urgency=0.4,
+            created_at=clock.now,
+        )
     )
     clock.advance(hours=2)
     await loop.tick()

@@ -113,6 +113,15 @@ class Policy:
     #: A repeat of the same fingerprint inside this window is dropped.
     dedupe_window: timedelta = timedelta(hours=6)
 
+    #: Ceiling on how long anything may sit in the digest queue.
+    #:
+    #: Without this, quiet hours plus a once-daily digest means something that
+    #: arrived at 21:00 waits until 08:00 -- and measurement showed exactly that:
+    #: interruptions fell 80% while urgent mail surfaced within an hour only
+    #: 47% of the time. Buying quiet by burying things is not a win. Anything
+    #: held this long is promoted to an interrupt regardless of quiet hours.
+    max_hold: timedelta = timedelta(hours=3)
+
     #: Skip quiet hours entirely (useful in tests and for users who opt out).
     quiet_hours_enabled: bool = True
 
@@ -264,6 +273,33 @@ class AttentionBroker:
 
     def held_count(self) -> int:
         return len(self._held)
+
+    def promote_stale(self) -> int:
+        """Move anything held past ``max_hold`` into the interrupt queue.
+
+        The escape hatch that stops the digest becoming a place things go to
+        die. Returns how many were promoted.
+        """
+
+        if not self._held:
+            return 0
+
+        now = self._now()
+        cutoff = now - self.policy.max_hold
+        stale = [item for item in self._held if item.created_at <= cutoff]
+        if not stale:
+            return 0
+
+        self._held = [item for item in self._held if item.created_at > cutoff]
+        self._pending_interrupts.extend(stale)
+        if self._window_opened_at is None:
+            self._window_opened_at = now
+
+        self.decisions.extend(
+            Decision(item, Route.INTERRUPT, "held too long; promoted") for item in stale
+        )
+        logger.info(f"Broker promoted {len(stale)} item(s) held past the hold ceiling")
+        return len(stale)
 
     def _render(self, batch: Sequence[Candidate]) -> str:
         if len(batch) == 1:

@@ -111,6 +111,7 @@ class AttentionLoop:
         """One pass: flush a closed window, and the digest when it's due."""
 
         broker = get_attention_broker()
+        broker.promote_stale()
         await broker.flush()
 
         local = _local_now()
