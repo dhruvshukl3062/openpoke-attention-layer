@@ -55,6 +55,14 @@ def isolated_state(tmp_path, monkeypatch):
     registry = registry_module.AgentRegistry(data_dir / "execution_agents" / "registry.json")
     monkeypatch.setattr(registry_module, "_registry", registry)
 
+    # -- attention layer: broker --------------------------------------------
+    # The broker holds dedupe history and an interruption budget, so a shared
+    # instance would let one test's decisions change another's routing.
+    from server.services.attention import service as attention_service
+
+    monkeypatch.setattr(attention_service, "_broker", None)
+    monkeypatch.setattr(attention_service, "_loop", None)
+
     yield
 
 

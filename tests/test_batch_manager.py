@@ -117,38 +117,9 @@ async def test_a_later_turn_does_not_get_swallowed_by_an_open_batch(captured_dis
     assert len(captured_dispatches) == 2
 
 
-@pytest.mark.known_bug
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "TriggerScheduler constructs a fresh ExecutionBatchManager per trigger, "
-        "so trigger results share no batch state with anything and each one "
-        "interrupts the user separately."
-    ),
-)
-async def test_triggers_firing_together_are_delivered_together(captured_dispatches):
-    """Three reminders due in the same tick should reach the user as one message."""
-
-    from server.services import trigger_scheduler as scheduler_module
-
-    managers = []
-
-    def _tracking_manager(*args, **kwargs):
-        manager = ExecutionBatchManager(*args, **kwargs)
-        managers.append(manager)
-        return manager
-
-    # Mirrors what TriggerScheduler._execute_trigger does per due trigger.
-    assert scheduler_module.ExecutionBatchManager is ExecutionBatchManager
-
-    await asyncio.gather(
-        *[
-            _tracking_manager().execute_agent(f"Reminder {index}", "fire")
-            for index in range(3)
-        ]
-    )
-
-    assert len(captured_dispatches) == 1, (
-        f"three simultaneous triggers produced {len(captured_dispatches)} "
-        "separate interruptions"
-    )
+# The second batching defect -- TriggerScheduler building a fresh
+# ExecutionBatchManager per trigger, so simultaneous reminders never batch --
+# is no longer user-visible: every result now passes through the attention
+# broker, which coalesces across sources. See
+# tests/test_attention_wiring.py::test_simultaneous_triggers_reach_the_user_once.
+# The underlying duplication remains and is documented in the README.

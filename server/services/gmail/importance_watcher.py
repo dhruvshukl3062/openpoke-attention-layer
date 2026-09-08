@@ -204,7 +204,7 @@ class ImportantEmailWatcher:
                 continue
 
             summaries_sent += 1
-            await self._dispatch_summary(summary)
+            await self._dispatch_summary(summary, email_id=email.id)
 
         if processed_ids:
             self._seen_store.mark_seen(processed_ids)
@@ -219,14 +219,32 @@ class ImportantEmailWatcher:
         )
         self._complete_poll(user_now)
 
-    async def _dispatch_summary(self, summary: str) -> None:
-        runtime = _resolve_interaction_runtime()
+    async def _dispatch_summary(self, summary: str, *, email_id: str = "") -> None:
+        """Publish to the attention broker rather than interrupting the user.
+
+        Upstream called the interaction agent per important email, so ten
+        interesting messages meant ten pings and ten model calls. The broker
+        dedupes, coalesces and budgets; whether this ever reaches the user is
+        its decision, not the watcher's.
+        """
+
+        from ..attention.scoring import urgency_for_email
+        from ..attention.service import submit_candidate
+        from ..attention.broker import Candidate
+
         try:
             contextualized = f"Important email watcher notification:\n{summary}"
-            await runtime.handle_agent_message(contextualized)
+            submit_candidate(
+                Candidate(
+                    source="email_watcher",
+                    key=email_id or summary[:80],
+                    summary=contextualized,
+                    urgency=urgency_for_email(summary, classified_important=True),
+                )
+            )
         except Exception as exc:  # pragma: no cover - defensive
             logger.error(
-                "Failed to dispatch important email summary",
+                "Failed to submit important email summary",
                 extra={"error": str(exc)},
             )
 

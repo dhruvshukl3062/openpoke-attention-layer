@@ -11,6 +11,7 @@ from .config import get_settings
 from .logging_config import configure_logging, logger
 from .routes import api_router
 from .services import get_important_email_watcher, get_trigger_scheduler
+from .services.attention.service import get_attention_loop
 
 
 # Register global exception handlers for consistent error responses across the API
@@ -72,6 +73,8 @@ async def _start_trigger_scheduler() -> None:
     await scheduler.start()
     watcher = get_important_email_watcher()
     await watcher.start()
+    attention = get_attention_loop()
+    await attention.start()
 
 
 @app.on_event("shutdown")
@@ -81,6 +84,8 @@ async def _stop_trigger_scheduler() -> None:
     await scheduler.stop()
     watcher = get_important_email_watcher()
     await watcher.stop()
+    attention = get_attention_loop()
+    await attention.stop()
 
 
 __all__ = ["app"]

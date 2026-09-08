@@ -5,10 +5,13 @@ both sides without one.
 
 * ``registry`` -- structured records for execution agents, so the orchestrator
   can be shown a ranked shortlist instead of the entire roster on every turn.
-* (upcoming) ``broker`` -- everything that would interrupt the user goes through
-  one place that dedupes, batches, scores and budgets interruptions.
+* ``broker`` -- everything that would interrupt the user goes through one place
+  that dedupes, batches and budgets interruptions.
+* ``scoring`` -- where each source's urgency comes from, kept out of the broker
+  so policy and judgement can be evaluated separately.
 """
 
+from .broker import AttentionBroker, Candidate, Decision, Policy, Route
 from .compaction import compact_agent_history, needs_compaction, render_agent_history
 from .registry import (
     DEFAULT_DORMANT_AFTER,
@@ -19,6 +22,11 @@ from .registry import (
 )
 
 __all__ = [
+    "AttentionBroker",
+    "Candidate",
+    "Decision",
+    "Policy",
+    "Route",
     "compact_agent_history",
     "needs_compaction",
     "render_agent_history",

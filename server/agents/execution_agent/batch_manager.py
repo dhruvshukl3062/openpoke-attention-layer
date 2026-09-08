@@ -179,15 +179,23 @@ class ExecutionBatchManager:
 
     # Forward combined execution results to interaction agent for user response generation
     async def _dispatch_to_interaction_agent(self, payload: str) -> None:
-        """Send the aggregated execution summary to the interaction agent."""
+        """Publish the aggregated execution summary to the attention broker.
 
-        from ..interaction_agent.runtime import InteractionAgentRuntime
+        Batching here only groups agents that shared a batch; the broker is what
+        coalesces across sources and decides whether this warrants interrupting
+        the user at all.
+        """
 
-        runtime = InteractionAgentRuntime()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.run(runtime.handle_agent_message(payload))
-            return
+        from ...services.attention.broker import Candidate
+        from ...services.attention.scoring import urgency_for_execution_result
+        from ...services.attention.service import submit_candidate
 
-        loop.create_task(runtime.handle_agent_message(payload))
+        succeeded = "[FAILED]" not in payload
+        submit_candidate(
+            Candidate(
+                source="execution_batch",
+                key=f"batch:{hash(payload) & 0xFFFF:04x}",
+                summary=payload,
+                urgency=urgency_for_execution_result(payload, success=succeeded),
+            )
+        )
