@@ -47,3 +47,6 @@ server/plans/
 
 # Test artifacts
 .pytest_cache/
+
+# Local scratch
+_scratch/
