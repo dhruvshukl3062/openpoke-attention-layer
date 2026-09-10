@@ -1,8 +1,12 @@
 > ## 📌 Take-home submission
 >
-> This fork adds **the Attention Layer** — a response to the brief on agent overload.
-> The write-up, findings, design rationale, results and limitations are in
-> **[ATTENTION_LAYER.md](ATTENTION_LAYER.md)**. Start there.
+> This fork adds **the Attention Layer**, my work on agent overload. It gives OpenPoke an
+> attention budget: bounded context for the orchestrator, and one gate in front of
+> everything that wants to interrupt the user.
+>
+> My write-up covers how I defined the problem, what I found in the code, the design, how I
+> tested it, the results and the limitations. It's in
+> **[ATTENTION_LAYER.md](ATTENTION_LAYER.md)**, and that's the place to start.
 >
 > Quick check, no API key needed:
 > ```bash
