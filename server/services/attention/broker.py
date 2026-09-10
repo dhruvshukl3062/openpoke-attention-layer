@@ -274,6 +274,30 @@ class AttentionBroker:
     def held_count(self) -> int:
         return len(self._held)
 
+    # -- read-only views ---------------------------------------------------
+    #
+    # The evaluation harness needs to see what is queued in order to attribute
+    # deliveries to specific candidates. These exist so it can do that through
+    # a supported surface rather than reaching into private state -- otherwise
+    # any refactor of the internals silently breaks the metrics.
+
+    def pending_interrupts(self) -> tuple[Candidate, ...]:
+        """Candidates waiting for the current coalescing window to close."""
+
+        return tuple(self._pending_interrupts)
+
+    def held_items(self) -> tuple[Candidate, ...]:
+        """Candidates held back for the next digest."""
+
+        return tuple(self._held)
+
+    def window_due_at(self) -> Optional[datetime]:
+        """When the open coalescing window closes, or None if none is open."""
+
+        if self._window_opened_at is None:
+            return None
+        return self._window_opened_at + timedelta(seconds=self.policy.coalesce_seconds)
+
     def promote_stale(self) -> int:
         """Move anything held past ``max_hold`` into the interrupt queue.
 

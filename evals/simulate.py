@@ -167,7 +167,7 @@ async def run_attention_sim(
         nonlocal last_digest_date
         clock.now = at
         local_clock.now = at + LOCAL_OFFSET
-        held = list(broker._held)
+        held = list(broker.held_items())
         if held:
             await broker.flush_digest()
             for candidate in held:
@@ -198,13 +198,12 @@ async def run_attention_sim(
         broker.promote_stale()
 
         while broker.window_is_open():
-            opened = broker._window_opened_at
-            due = opened + timedelta(seconds=policy.coalesce_seconds)
-            if due > moment:
+            due = broker.window_due_at()
+            if due is None or due > moment:
                 break
             clock.now = due
             local_clock.now = due + LOCAL_OFFSET
-            in_flight[:] = broker._pending_interrupts
+            in_flight[:] = broker.pending_interrupts()
             payload = await broker.flush()
             if payload is not None:
                 for candidate in in_flight:
@@ -244,7 +243,7 @@ async def run_attention_sim(
     # Close out anything still in flight at the end of the run.
     if world.emails:
         await advance_to(world.emails[-1].arrived_at + timedelta(hours=2))
-    in_flight[:] = broker._pending_interrupts
+    in_flight[:] = broker.pending_interrupts()
     payload = await broker.flush(force=True)
     if payload is not None:
         for candidate in in_flight:
