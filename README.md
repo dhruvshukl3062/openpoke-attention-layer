@@ -1,5 +1,3 @@
-> ## 📌 Take-home submission
->
 > This fork adds **the Attention Layer**, my work on agent overload. It gives OpenPoke an
 > attention budget: bounded context for the orchestrator, and one gate in front of
 > everything that wants to interrupt the user.
